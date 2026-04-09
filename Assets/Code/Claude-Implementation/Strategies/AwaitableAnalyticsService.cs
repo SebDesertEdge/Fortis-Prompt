@@ -2,29 +2,42 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using Fortis.Analytics;
 using Fortis.Core.DependencyInjection;
 using Interview.Mocks;
+using UnityEngine;
 using Debug = UnityEngine.Debug;
 
-namespace Fortis
+namespace Fortis.Analytics.Strategies
 {
-    public class AnalyticsService : IAnalyticsService, IInitializable, ITickable
+    /// <summary>
+    /// Unity 6 Awaitable-based analytics service. Uses async Awaitable to process
+    /// events one per frame on the main thread, with no raw threads.
+    ///
+    /// The processing loop awaits NextFrameAsync() between events, naturally
+    /// spreading work across frames. SendEvent() executes on the main thread
+    /// (required by UnityEngine.Random.value in the mock).
+    ///
+    /// Trade-off: hitches still occur for the SDK call, but the pattern is clean,
+    /// allocation-free (Awaitable is pooled), and uses Unity 6 native async.
+    /// </summary>
+    public class AwaitableAnalyticsService : MonoBehaviour, IAnalyticsService
     {
-        [Inject] protected AnalyticsConfig Config;
-
         public CircuitBreaker CircuitBreaker { get; private set; }
         public AnalyticsMetrics Metrics { get; private set; }
 
         public bool IsReady => CircuitBreaker?.State != CircuitState.Open;
-        public int MaxRetryBufferSize => Config.MaxRetryBufferSize;
+        public int MaxRetryBufferSize => _maxRetryBufferSize;
 
-        private const int MaxEventsPerTick = 5;
+        private int _failureThreshold = 5;
+        private int _circuitOpenDurationMs = 10000;
+        private int _maxRetryBufferSize = 100;
 
         private UnstableLegacyService _service;
         private ConcurrentQueue<AnalyticsEvent> _eventQueue;
         private Queue<AnalyticsEvent> _retryBuffer;
-        private bool _flushRequested;
+        private volatile bool _flushRequested;
 
         private readonly struct AnalyticsEvent
         {
@@ -44,39 +57,67 @@ namespace Fortis
             _eventQueue.Enqueue(new AnalyticsEvent(eventName, onComplete));
         }
 
-        public void Initialize()
+        private void Awake()
         {
+            var config = AnalyticsConfig.Instance;
+            if (config != null)
+            {
+                _failureThreshold = config.FailureThreshold;
+                _circuitOpenDurationMs = config.CircuitOpenDurationMs;
+                _maxRetryBufferSize = config.MaxRetryBufferSize;
+            }
+
             _eventQueue = new ConcurrentQueue<AnalyticsEvent>();
             _retryBuffer = new Queue<AnalyticsEvent>();
 
             _service = new UnstableLegacyService();
             Metrics = new AnalyticsMetrics();
-            CircuitBreaker = new CircuitBreaker(Config.FailureThreshold, Config.CircuitOpenDurationMs);
+            CircuitBreaker = new CircuitBreaker(_failureThreshold, _circuitOpenDurationMs);
 
             CircuitBreaker.OnStateChanged += OnCircuitStateChanged;
 
-            Debug.Log("[ResilientAnalytics] Initialized.");
+            StartProcessingLoop();
+
+            Debug.Log("[AwaitableAnalytics] Initialized.");
         }
 
-        public void Tick()
+        private async void StartProcessingLoop()
         {
-            int processed = 0;
-            while (processed < MaxEventsPerTick && _eventQueue.TryDequeue(out var evt))
+            try
             {
-                if (!CircuitBreaker.AllowRequest())
+                await ProcessingLoop();
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Debug.LogException(ex); }
+        }
+
+        private async Awaitable ProcessingLoop()
+        {
+            var token = destroyCancellationToken;
+
+            while (!token.IsCancellationRequested)
+            {
+                // Process at most 1 event per frame
+                if (_eventQueue.TryDequeue(out var evt))
                 {
-                    BufferForRetry(evt);
-                    continue;
+                    if (!CircuitBreaker.AllowRequest())
+                    {
+                        BufferForRetry(evt);
+                    }
+                    else
+                    {
+                        ExecuteEvent(evt);
+                    }
                 }
 
-                ExecuteEvent(evt);
-                processed++;
-            }
+                if (_flushRequested)
+                {
+                    _flushRequested = false;
+                    FlushRetryBuffer();
+                }
 
-            if (_flushRequested)
-            {
-                _flushRequested = false;
-                FlushRetryBuffer();
+                // Yield to next frame
+                await Awaitable.NextFrameAsync(token);
             }
         }
 
@@ -97,7 +138,7 @@ namespace Fortis
                 sw.Stop();
                 CircuitBreaker.RecordFailure();
                 Metrics.RecordFailure();
-                Debug.LogWarning($"[ResilientAnalytics] Event '{evt.EventName}' failed: {ex.Message}");
+                Debug.LogWarning($"[AwaitableAnalytics] Event '{evt.EventName}' failed: {ex.Message}");
             }
 
             Metrics.AddSavedHitchTime(sw.ElapsedMilliseconds);
@@ -108,7 +149,7 @@ namespace Fortis
         {
             evt.Callback?.Invoke(false);
 
-            if (_retryBuffer.Count >= MaxRetryBufferSize)
+            if (_retryBuffer.Count >= _maxRetryBufferSize)
             {
                 _retryBuffer.Dequeue();
                 Metrics.RecordDrop();
@@ -136,7 +177,15 @@ namespace Fortis
             if (newState == CircuitState.Closed)
                 _flushRequested = true;
 
-            Debug.Log($"[ResilientAnalytics] Circuit state -> {newState}");
+            Debug.Log($"[AwaitableAnalytics] Circuit state -> {newState}");
+        }
+
+        private void OnDestroy()
+        {
+            if (CircuitBreaker != null)
+                CircuitBreaker.OnStateChanged -= OnCircuitStateChanged;
+
+            Debug.Log("[AwaitableAnalytics] Shut down.");
         }
     }
 }

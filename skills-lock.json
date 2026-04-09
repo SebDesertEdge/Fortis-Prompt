@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "unity-ecs-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "e67fd60e82074a1a2882774b05c8938111c4b1b370eecc6698e6adb7787ae928"
+    }
+  }
+}

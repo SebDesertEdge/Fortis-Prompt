@@ -1,41 +1,55 @@
 using Fortis;
+using Fortis.Analytics;
 using Fortis.Core.DependencyInjection;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fortis.Analytics.Editor
+namespace Code.Editor
 {
-    public class ResilientAnalyticsWindow : EditorWindow
+    public class AnalyticsServiceWindow : EditorWindow
     {
-        [MenuItem("Tools/Resilient Analytics Monitor")]
+        [MenuItem("Tools/Analytics Monitor")]       
         public static void ShowWindow()
         {
-            GetWindow<ResilientAnalyticsWindow>("Analytics Monitor");
+            GetWindow<AnalyticsServiceWindow>("Analytics Monitor");
         }
 
         private void OnGUI()
         {
             if (!Application.isPlaying)
             {
-                EditorGUILayout.HelpBox(
-                    "Enter Play Mode to view analytics metrics.",
-                    MessageType.Info);
+                var config = AnalyticsConfig.Instance;
+                if (config == null)
+                {
+                    EditorGUILayout.HelpBox(
+                        "Analytics configuration not found. " +
+                        "Please create a new AnalyticsConfig asset in the Resources folder.",
+                        MessageType.Error);
+                    if (GUILayout.Button("Create Config"))
+                    {
+                        AnalyticsConfig.CreateConfig();
+                    }
+                    return;
+                }
+                
+                var serializedState = new SerializedObject(AnalyticsConfig.Instance);
+                EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.UseClaudeImplementation)));
+                EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.FailureThreshold)));
+                EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.CircuitOpenDurationMs)));
+                EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.MaxRetryBufferSize)));
+                
+                serializedState.ApplyModifiedProperties();
                 return;
             }
 
-            var instance = DiContainer.Resolve<IAnalyticsService>();
-            if (instance == null) return;
-
-            var config = AnalyticsConfig.Instance;
-            if (config != null)
+            var analyticsService = DiContainer.Resolve<IAnalyticsService>();
+            if (analyticsService == null)
             {
-                EditorGUILayout.LabelField("Active Strategy",
-                    config.Implementation.ToString(), EditorStyles.boldLabel);
-                EditorGUILayout.Space(5);
+                return;
             }
 
-            var breaker = instance.CircuitBreaker;
-            var metrics = instance.Metrics;
+            var breaker = analyticsService.CircuitBreaker;
+            var metrics = analyticsService.Metrics;
 
             // Circuit Breaker State
             EditorGUILayout.LabelField("Circuit Breaker", EditorStyles.boldLabel);
@@ -74,17 +88,16 @@ namespace Fortis.Analytics.Editor
             EditorGUILayout.LabelField("Saved Hitch Time", savedDisplay);
             EditorGUILayout.LabelField("Success Rate",
                 $"{metrics.SuccessRate * 100f:F1}%");
-            EditorGUILayout.LabelField("Circuit Opens",
-                metrics.CircuitOpenCount.ToString());
+            EditorGUILayout.LabelField("Circuit Opens", metrics.CircuitOpenCount.ToString());
             EditorGUILayout.LabelField("SDK Ready",
-                instance.IsReady ? "Yes" : "No (circuit open)");
+                analyticsService.IsReady ? "Yes" : "No (circuit open)");
 
             EditorGUILayout.Space(10);
 
             // Retry Buffer
             EditorGUILayout.LabelField("Retry Buffer", EditorStyles.boldLabel);
             var bufferSize = metrics.RetryBufferSize;
-            var maxBuffer = instance.MaxRetryBufferSize;
+            var maxBuffer = analyticsService.MaxRetryBufferSize;
             var barRect = EditorGUILayout.GetControlRect(false, 20);
             EditorGUI.ProgressBar(barRect,
                 maxBuffer > 0 ? bufferSize / (float)maxBuffer : 0f,
@@ -98,13 +111,13 @@ namespace Fortis.Analytics.Editor
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Send Test Event"))
             {
-                instance.SendEvent("editor_test_event", success =>
-                    UnityEngine.Debug.Log($"[AnalyticsMonitor] Test event result: {success}"));
+                analyticsService.SendEvent("editor_test_event", success =>
+                    Debug.Log($"[AnalyticsMonitor] Test event result: {success}"));
             }
             if (GUILayout.Button("Send 20 Events (Burst)"))
             {
                 for (int i = 0; i < 20; i++)
-                    instance.SendEvent($"burst_event_{i}");
+                    analyticsService.SendEvent($"burst_event_{i}");
             }
             EditorGUILayout.EndHorizontal();
 
@@ -114,12 +127,6 @@ namespace Fortis.Analytics.Editor
             }
 
             Repaint();
-        }
-
-        private void OnInspectorUpdate()
-        {
-            if (Application.isPlaying)
-                Repaint();
         }
     }
 }

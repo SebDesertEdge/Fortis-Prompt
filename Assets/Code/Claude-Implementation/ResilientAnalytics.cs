@@ -9,7 +9,20 @@ using Debug = UnityEngine.Debug;
 
 namespace Fortis.Analytics
 {
-    public class ResilientAnalytics : MonoBehaviour
+    /// <summary>
+    /// Worker-thread analytics service that offloads all processing to a background thread.
+    ///
+    /// THREADING CAVEAT: UnstableLegacyService.SendEvent() calls UnityEngine.Random.value,
+    /// which is a main-thread-only API. In development builds, this will throw
+    /// "UnityException: Random can only be called from the main thread."
+    /// In release builds, the thread check is skipped for performance, so it runs
+    /// but with technically undefined behavior.
+    ///
+    /// In a real production scenario, a legacy SDK would not use UnityEngine.Random
+    /// internally — it would use System.Random or its own RNG. This caveat is specific
+    /// to the mock's simplified implementation.
+    /// </summary>
+    public class ResilientAnalytics : MonoBehaviour, IAnalyticsService
     {
         private static ResilientAnalytics _instance;
         public static ResilientAnalytics Instance
@@ -76,6 +89,14 @@ namespace Fortis.Analytics
             }
             _instance = this;
             DontDestroyOnLoad(gameObject);
+
+            var config = Fortis.AnalyticsConfig.Instance;
+            if (config != null)
+            {
+                _failureThreshold = config.FailureThreshold;
+                _circuitOpenDurationMs = config.CircuitOpenDurationMs;
+                _maxRetryBufferSize = config.MaxRetryBufferSize;
+            }
 
             _eventQueue = new ConcurrentQueue<AnalyticsEvent>();
             _mainThreadActions = new ConcurrentQueue<Action>();

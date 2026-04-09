@@ -7,9 +7,15 @@ using Fortis.Core.DependencyInjection;
 using Interview.Mocks;
 using Debug = UnityEngine.Debug;
 
-namespace Fortis
+namespace Fortis.Analytics.Strategies
 {
-    public class AnalyticsService : IAnalyticsService, IInitializable, ITickable
+    /// <summary>
+    /// Main-thread-only analytics service that processes at most 1 event per frame.
+    /// Safe for all Unity APIs since everything runs on the main thread.
+    /// Trade-off: hitches still occur but are bounded to 1 per frame, and the
+    /// circuit breaker will stop calls when failures cascade.
+    /// </summary>
+    public class ThrottledAnalyticsService : IAnalyticsService, IInitializable, ITickable
     {
         [Inject] protected AnalyticsConfig Config;
 
@@ -18,8 +24,6 @@ namespace Fortis
 
         public bool IsReady => CircuitBreaker?.State != CircuitState.Open;
         public int MaxRetryBufferSize => Config.MaxRetryBufferSize;
-
-        private const int MaxEventsPerTick = 5;
 
         private UnstableLegacyService _service;
         private ConcurrentQueue<AnalyticsEvent> _eventQueue;
@@ -55,22 +59,22 @@ namespace Fortis
 
             CircuitBreaker.OnStateChanged += OnCircuitStateChanged;
 
-            Debug.Log("[ResilientAnalytics] Initialized.");
+            Debug.Log("[ThrottledAnalytics] Initialized.");
         }
 
         public void Tick()
         {
-            int processed = 0;
-            while (processed < MaxEventsPerTick && _eventQueue.TryDequeue(out var evt))
+            // Process at most 1 event per frame to bound hitch impact
+            if (_eventQueue.TryDequeue(out var evt))
             {
                 if (!CircuitBreaker.AllowRequest())
                 {
                     BufferForRetry(evt);
-                    continue;
                 }
-
-                ExecuteEvent(evt);
-                processed++;
+                else
+                {
+                    ExecuteEvent(evt);
+                }
             }
 
             if (_flushRequested)
@@ -97,7 +101,7 @@ namespace Fortis
                 sw.Stop();
                 CircuitBreaker.RecordFailure();
                 Metrics.RecordFailure();
-                Debug.LogWarning($"[ResilientAnalytics] Event '{evt.EventName}' failed: {ex.Message}");
+                Debug.LogWarning($"[ThrottledAnalytics] Event '{evt.EventName}' failed: {ex.Message}");
             }
 
             Metrics.AddSavedHitchTime(sw.ElapsedMilliseconds);
@@ -136,7 +140,7 @@ namespace Fortis
             if (newState == CircuitState.Closed)
                 _flushRequested = true;
 
-            Debug.Log($"[ResilientAnalytics] Circuit state -> {newState}");
+            Debug.Log($"[ThrottledAnalytics] Circuit state -> {newState}");
         }
     }
 }
