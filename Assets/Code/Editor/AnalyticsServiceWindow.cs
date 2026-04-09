@@ -33,7 +33,7 @@ namespace Code.Editor
                 }
                 
                 var serializedState = new SerializedObject(AnalyticsConfig.Instance);
-                EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.UseClaudeImplementation)));
+                EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.Implementation)));
                 EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.FailureThreshold)));
                 EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.CircuitOpenDurationMs)));
                 EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.MaxRetryBufferSize)));
