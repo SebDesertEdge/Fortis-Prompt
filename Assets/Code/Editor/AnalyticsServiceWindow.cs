@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading.Tasks;
+using Claude.Analytics;
 using Fortis;
-using Fortis.Analytics;
 using Fortis.Core.DependencyInjection;
 using UnityEditor;
 using UnityEngine;
@@ -13,7 +14,6 @@ namespace Code.Editor
     {
         private struct BenchmarkResult
         {
-            public string ImplementationName;
             public int EventCount;
             public long WallClockMs;
             public double ThroughputPerSec;
@@ -25,24 +25,22 @@ namespace Code.Editor
             public long SavedHitchTimeMs;
             public long PeakRetryBuffer;
             public long CircuitOpenCount;
+            public float FrameBudgetMs;
         }
 
+        private Vector2 _scrollPosition;
+        private bool _sendEventsInMainThread;
+        
         // Benchmark state
         private int _eventCount = 50;
         private bool _benchmarkRunning;
-        private bool _restarting;
         private int _completedCallbacks;
         private int _expectedCallbacks;
         private Stopwatch _stopwatch;
         private long _peakRetryBuffer;
 
-        // Implementation switching
-        private AnalyticsImplementation _selectedImpl;
-        private bool _implInitialized;
-
         // History
         private readonly List<BenchmarkResult> _history = new();
-        private Vector2 _historyScroll;
 
         private double _lastRepaintTime;
         private const double RepaintInterval = 0.25;
@@ -65,7 +63,10 @@ namespace Code.Editor
 
         private void OnEditorUpdate()
         {
-            if (!_benchmarkRunning && !_restarting) return;
+            if (!_benchmarkRunning)
+            {
+                return;
+            }
 
             if (_benchmarkRunning)
             {
@@ -87,13 +88,17 @@ namespace Code.Editor
 
         private void OnGUI()
         {
+            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
             if (!Application.isPlaying)
             {
                 DrawEditMode();
-                return;
             }
-
-            DrawPlayMode();
+            else
+            {
+                DrawPlayMode();    
+            }
+            EditorGUILayout.Space(10);
+            EditorGUILayout.EndScrollView();
         }
 
         private void DrawEditMode()
@@ -112,58 +117,58 @@ namespace Code.Editor
                 return;
             }
 
-            var serializedState = new SerializedObject(AnalyticsConfig.Instance);
-            EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.Implementation)));
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("SETUP CONFIG FILE", new GUIStyle(EditorStyles.boldLabel)
+            {
+                fontSize = 18,
+                alignment = TextAnchor.MiddleLeft
+            });
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.LabelField("Fortis", EditorStyles.miniLabel, GUILayout.Width(40));
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(4);
+            
+            var serializedState = new SerializedObject(config);
             EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.FailureThreshold)));
             EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.CircuitOpenDurationMs)));
-            EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.MaxRetryBufferSize)));
+            EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.FrameBudgetMs)));
+            EditorGUILayout.PropertyField(serializedState.FindProperty(nameof(AnalyticsConfig.RetryConfig)));
 
             serializedState.ApplyModifiedProperties();
-
-            EditorGUILayout.Space(10);
-            DrawHistory();
         }
 
         private void DrawPlayMode()
         {
             var config = AnalyticsConfig.Instance;
-            if (config == null) return;
-
-            // --- Implementation Switching ---
-            if (!_implInitialized)
-            {
-                _selectedImpl = config.Implementation;
-                _implInitialized = true;
-            }
-
-            EditorGUILayout.LabelField("Implementation", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Active", config.Implementation.ToString());
-
-            EditorGUILayout.BeginHorizontal();
-            _selectedImpl = (AnalyticsImplementation)EditorGUILayout.EnumPopup("Switch To", _selectedImpl);
-
-            bool needsRestart = _selectedImpl != config.Implementation;
-            EditorGUI.BeginDisabledGroup(!needsRestart || _benchmarkRunning || _restarting);
-            if (GUILayout.Button("Restart", GUILayout.Width(70)))
-            {
-                SwitchImplementation(config);
-            }
-            EditorGUI.EndDisabledGroup();
-            EditorGUILayout.EndHorizontal();
-
-            if (_restarting)
-            {
-                EditorGUILayout.HelpBox("Restarting container...", MessageType.Info);
-                return;
-            }
-
             EditorGUILayout.Space(10);
 
-            var analyticsService = DiContainer.Resolve<IAnalyticsService>();
-            if (analyticsService == null) return;
-
-            var breaker = analyticsService.CircuitBreaker;
-            var metrics = analyticsService.Metrics;
+            var service = DiContainer.Resolve<IAnalyticsService>();
+            if (service == null)
+            {
+                return;
+            }
+            
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("LIVE MODE", new GUIStyle(EditorStyles.boldLabel)
+            {
+                fontSize = 18,
+                alignment = TextAnchor.MiddleLeft
+            });
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.LabelField("Fortis", EditorStyles.miniLabel, GUILayout.Width(40));
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(4);
+            
+            EditorGUI.BeginDisabledGroup(_benchmarkRunning);
+            _sendEventsInMainThread = EditorGUILayout.ToggleLeft("Send Events in Main Thread", _sendEventsInMainThread);
+            EditorGUILayout.Space(4);
+            
+            EditorGUILayout.LabelField("Current Config", EditorStyles.boldLabel);
+            config.FrameBudgetMs = EditorGUILayout.FloatField("Frame Budget Ms", config.FrameBudgetMs);
+            EditorGUILayout.Space(4);
+            
+            var breaker = service.CircuitBreaker;
+            var metrics = service.Metrics;
 
             // --- Circuit Breaker State ---
             EditorGUILayout.LabelField("Circuit Breaker", EditorStyles.boldLabel);
@@ -177,12 +182,26 @@ namespace Code.Editor
                 _                    => Color.white
             };
             EditorGUILayout.LabelField("State", state.ToString(), EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Failure Threshold", config.FailureThreshold.ToString());
+            
+            if (state == CircuitState.Open)
+            {
+                EditorGUILayout.LabelField("Circuit Open DurationMs", $"{breaker.ClosenessToOpen} of {breaker.OpenDurationMs} ({breaker.PercentageOpenStateCompletion}%)");
+            }
+            else
+            {
+                EditorGUILayout.LabelField("Consecutive Failures", breaker.ConsecutiveFailures.ToString());    
+            }
+            GUI.color = prevColor;
+
+            EditorGUILayout.Space(10);
+
             GUI.color = prevColor;
 
             EditorGUILayout.Space(10);
 
             // --- Event Metrics ---
-            EditorGUILayout.LabelField("Event Metrics", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Benchmark Metrics", EditorStyles.boldLabel);
             EditorGUI.BeginDisabledGroup(true);
             EditorGUILayout.LongField("Total Enqueued", metrics.TotalEnqueued);
             EditorGUILayout.LongField("Succeeded", metrics.TotalSucceeded);
@@ -192,64 +211,14 @@ namespace Code.Editor
             EditorGUI.EndDisabledGroup();
 
             EditorGUILayout.Space(10);
-
-            // --- Performance ---
-            EditorGUILayout.LabelField("Performance", EditorStyles.boldLabel);
-            var savedMs = metrics.SavedHitchTimeMs;
-            var savedDisplay = savedMs >= 1000
-                ? $"{savedMs / 1000f:F1}s"
-                : $"{savedMs}ms";
-            EditorGUILayout.LabelField("Saved Hitch Time", savedDisplay);
-            EditorGUILayout.LabelField("Success Rate",
-                $"{metrics.SuccessRate * 100f:F1}%");
-            EditorGUILayout.LabelField("Circuit Opens", metrics.CircuitOpenCount.ToString());
-            EditorGUILayout.LabelField("SDK Ready",
-                analyticsService.IsReady ? "Yes" : "No (circuit open)");
-
-            EditorGUILayout.Space(10);
-
-            // --- Retry Buffer ---
-            EditorGUILayout.LabelField("Retry Buffer", EditorStyles.boldLabel);
-            var bufferSize = metrics.RetryBufferSize;
-            var maxBuffer = analyticsService.MaxRetryBufferSize;
-            var barRect = EditorGUILayout.GetControlRect(false, 20);
-            EditorGUI.ProgressBar(barRect,
-                maxBuffer > 0 ? bufferSize / (float)maxBuffer : 0f,
-                $"{bufferSize} / {maxBuffer}");
-
-            EditorGUILayout.Space(10);
-
-            // --- Test Controls ---
-            EditorGUILayout.LabelField("Test Controls", EditorStyles.boldLabel);
-
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Send Test Event"))
-            {
-                analyticsService.SendEvent("editor_test_event", success =>
-                    UnityEngine.Debug.Log($"[AnalyticsMonitor] Test event result: {success}"));
-            }
-            if (GUILayout.Button("Send 20 Events (Burst)"))
-            {
-                for (int i = 0; i < 20; i++)
-                    analyticsService.SendEvent($"burst_event_{i}");
-            }
-            EditorGUILayout.EndHorizontal();
-
-            if (GUILayout.Button("Reset Metrics"))
-            {
-                metrics.Reset();
-            }
-
-            EditorGUILayout.Space(10);
-
+            
             // --- Benchmark ---
             EditorGUILayout.LabelField("Benchmark", EditorStyles.boldLabel);
-            EditorGUI.BeginDisabledGroup(_benchmarkRunning);
             _eventCount = EditorGUILayout.IntSlider("Event Count", _eventCount, 10, 500);
 
             if (GUILayout.Button("Run Benchmark", GUILayout.Height(28)))
             {
-                StartBenchmark(analyticsService, config.Implementation.ToString());
+                StartBenchmark(service);
             }
             EditorGUI.EndDisabledGroup();
 
@@ -270,7 +239,19 @@ namespace Code.Editor
             Repaint();
         }
 
-        private void StartBenchmark(IAnalyticsService service, string implName)
+        private void SendEvent(IAnalyticsService service, string eventName, Action<bool> onComplete = null)
+        {
+            if (_sendEventsInMainThread)
+            {
+                service.SendEvent(eventName, onComplete);
+            }
+            else
+            {
+                Task.Run(() => { service.SendEvent(eventName, onComplete); });
+            }
+        }
+
+        private void StartBenchmark(IAnalyticsService service)
         {
             service.Metrics.Reset();
 
@@ -282,19 +263,19 @@ namespace Code.Editor
 
             for (int i = 0; i < _eventCount; i++)
             {
-                service.SendEvent($"benchmark_event_{i}", success =>
+                SendEvent(service, $"benchmark_event_{i}", success =>
                 {
                     _completedCallbacks++;
 
                     if (_completedCallbacks >= _expectedCallbacks)
                     {
-                        FinishBenchmark(service, implName);
+                        FinishBenchmark(service);
                     }
                 });
             }
         }
 
-        private void FinishBenchmark(IAnalyticsService service, string implName)
+        private void FinishBenchmark(IAnalyticsService service)
         {
             _stopwatch.Stop();
             _benchmarkRunning = false;
@@ -305,9 +286,9 @@ namespace Code.Editor
                 ? (_expectedCallbacks / (wallMs / 1000.0))
                 : 0;
 
+            var config = AnalyticsConfig.Instance;
             _history.Add(new BenchmarkResult
             {
-                ImplementationName = implName,
                 EventCount = _expectedCallbacks,
                 WallClockMs = wallMs,
                 ThroughputPerSec = throughput,
@@ -318,31 +299,10 @@ namespace Code.Editor
                 SuccessRate = metrics.SuccessRate,
                 SavedHitchTimeMs = metrics.SavedHitchTimeMs,
                 PeakRetryBuffer = _peakRetryBuffer,
-                CircuitOpenCount = metrics.CircuitOpenCount
+                CircuitOpenCount = metrics.CircuitOpenCount,
+                FrameBudgetMs = config.FrameBudgetMs,
             });
 
-            Repaint();
-        }
-
-        private async void SwitchImplementation(AnalyticsConfig config)
-        {
-            _restarting = true;
-            Repaint();
-
-            config.Implementation = _selectedImpl;
-
-            var installer = UnityEngine.Object.FindAnyObjectByType<MainGameInstaller>();
-            if (installer != null)
-            {
-                await installer.FullRestart();
-                UnityEngine.Debug.Log($"[AnalyticsMonitor] Switched to {_selectedImpl}");
-            }
-            else
-            {
-                UnityEngine.Debug.LogError("[AnalyticsMonitor] MainGameInstaller not found in scene.");
-            }
-
-            _restarting = false;
             Repaint();
         }
 
@@ -366,8 +326,6 @@ namespace Code.Editor
             }
             EditorGUILayout.EndHorizontal();
 
-            _historyScroll = EditorGUILayout.BeginScrollView(_historyScroll);
-
             for (int i = _history.Count - 1; i >= 0; i--)
             {
                 DrawRunResult(i + 1, _history[i]);
@@ -375,8 +333,6 @@ namespace Code.Editor
                 if (i > 0)
                     EditorGUILayout.Space(2);
             }
-
-            EditorGUILayout.EndScrollView();
         }
 
         private void DrawRunResult(int runNumber, BenchmarkResult r)
@@ -384,7 +340,7 @@ namespace Code.Editor
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             EditorGUILayout.LabelField(
-                $"Run #{runNumber}  |  {r.ImplementationName}  |  {r.EventCount} events",
+                $"Run #{runNumber}  |  {r.EventCount} events | {r.FrameBudgetMs} frame budget",
                 EditorStyles.boldLabel);
 
             EditorGUILayout.Space(2);

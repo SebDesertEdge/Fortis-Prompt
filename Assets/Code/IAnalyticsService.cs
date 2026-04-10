@@ -1,5 +1,5 @@
 using System;
-using Fortis.Analytics;
+using Claude.Analytics;
 
 namespace Fortis
 {
@@ -8,7 +8,6 @@ namespace Fortis
         public CircuitBreaker CircuitBreaker { get; }
         public AnalyticsMetrics Metrics { get; }
         public bool IsReady { get; }
-        public int MaxRetryBufferSize { get; }
 
         public void SendEvent(string eventName, Action<bool> onComplete = null);
     }

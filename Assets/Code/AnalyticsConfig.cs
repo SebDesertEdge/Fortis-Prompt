@@ -1,3 +1,4 @@
+using Fortis.Analytics.PlayerLoop;
 using Fortis.Core.DependencyInjection;
 using Fortis.Core.Utilities;
 using UnityEditor;
@@ -5,38 +6,22 @@ using UnityEngine;
 
 namespace Fortis
 {
-    public enum AnalyticsImplementation
-    {
-        Baseline,
-        WorkerThread,
-        Throttled,
-        HybridDispatch,
-        Awaitable,
-        PlayerLoop
-    }
-
     public class AnalyticsConfig : ScriptableObject
     {
         private const string k_Path = "Assets/Config";
         private const string k_FileName = "AnalyticsConfig";
-
-        [Header("Implementation")]
-        public AnalyticsImplementation Implementation = AnalyticsImplementation.Baseline;
         
         [Header("Circuit Breaker")]
         public int FailureThreshold = 5;
         public int CircuitOpenDurationMs = 10000;
 
-        [Header("Retry Buffer")]
-        public int MaxRetryBufferSize = 100;
-
-        [Header("Frame Budget (PlayerLoop)")]
+        [Header("PlayerLoop")]
         [Tooltip("Max milliseconds per frame to spend draining the analytics queue.")]
         public float FrameBudgetMs = 8f;
-
-        [Header("Retry Policy (PlayerLoop)")]
-        [Tooltip("Maximum retry attempts before an event is dropped.")]
-        public int MaxRetryAttempts = 4;
+        
+        
+        [Header("Retry")]
+        public RetryConfig RetryConfig;
         
         public static AnalyticsConfig Instance
         {

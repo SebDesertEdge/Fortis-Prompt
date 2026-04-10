@@ -1,8 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using Fortis.Analytics;
-using Fortis.Analytics.PlayerLoop;
-using Fortis.Analytics.Strategies;
+using Code;
 using Fortis.Core.DependencyInjection;
 
 namespace Fortis
@@ -25,27 +23,11 @@ namespace Fortis
                 throw new Exception("AnalyticsConfig not found");
             }
 
-            switch (config.Implementation)
-            {
-                case AnalyticsImplementation.WorkerThread:
-                    Container.BindFromNewGameObject<ResilientAnalytics>(addInterfaces: true);
-                    break;
-                case AnalyticsImplementation.Throttled:
-                    Container.Bind<ThrottledAnalyticsService>(addInterfaces: true);
-                    break;
-                case AnalyticsImplementation.HybridDispatch:
-                    Container.Bind<HybridDispatchAnalyticsService>(addInterfaces: true);
-                    break;
-                case AnalyticsImplementation.Awaitable:
-                    Container.BindFromNewGameObject<AwaitableAnalyticsService>(addInterfaces: true);
-                    break;
-                case AnalyticsImplementation.PlayerLoop:
-                    Container.Bind<PlayerLoopAnalyticsService>(addInterfaces: true);
-                    break;
-                default:
-                    Container.Bind<AnalyticsService>(addInterfaces: true);
-                    break;
-            }
+            // Add here the claude implementation just to test the exception coming from UnityEngine.Random.value
+            // not be called in the main thread.
+            // Container.BindFromNewGameObject<Claude.Analytics.ResilientAnalytics>();
+            
+            Container.Bind<ResilientAnalytics>(addInterfaces: true);
         }
 
         protected override Task Run()

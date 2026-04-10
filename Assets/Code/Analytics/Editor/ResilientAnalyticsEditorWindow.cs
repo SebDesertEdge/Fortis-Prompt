@@ -4,7 +4,7 @@ using Fortis.Core.DependencyInjection;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fortis.Analytics.PlayerLoop.Editor
+namespace Claude.Analytics.PlayerLoop.Editor
 {
     public class ResilientAnalyticsEditorWindow : EditorWindow
     {
@@ -147,17 +147,6 @@ namespace Fortis.Analytics.PlayerLoop.Editor
             EditorGUILayout.LabelField("SAVED HITCH TIME", savedDisplay, _bodyStyle);
             EditorGUILayout.LabelField("Events Sent", metrics.TotalSucceeded.ToString("N0"), _bodyStyle);
             EditorGUILayout.LabelField("Events Dropped", metrics.TotalDropped.ToString("N0"), _bodyStyle);
-
-            // Pending queue bar
-            var bufferSize = metrics.RetryBufferSize;
-            var maxBuffer = service.MaxRetryBufferSize;
-            EditorGUILayout.LabelField("Pending Queue", _bodyStyle);
-            var barRect = EditorGUILayout.GetControlRect(false, 18);
-            EditorGUI.ProgressBar(barRect,
-                maxBuffer > 0 ? bufferSize / (float)maxBuffer : 0f,
-                $"{bufferSize} / {maxBuffer}");
-
-            EditorGUILayout.Space(4);
 
             // Extra metrics
             EditorGUI.BeginDisabledGroup(true);

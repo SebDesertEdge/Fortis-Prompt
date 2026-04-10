@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 
-namespace Fortis.Analytics
+namespace Claude.Analytics
 {
     public enum CircuitState
     {
@@ -14,7 +14,12 @@ namespace Fortis.Analytics
     {
         public int FailureThreshold { get; }
         public int OpenDurationMs { get; }
+        public int ConsecutiveFailures => _consecutiveFailures;
+        public long ClosenessToOpen => State == CircuitState.Open ? _getTimestamp() - Interlocked.Read(ref _openedAtTicks) : 0;
 
+        public float PercentageOpenStateCompletion =>
+            State == CircuitState.Open ? (ClosenessToOpen / OpenDurationMs) * 100 : 100; 
+        
         private int _state;
         private int _consecutiveFailures;
         private long _openedAtTicks;

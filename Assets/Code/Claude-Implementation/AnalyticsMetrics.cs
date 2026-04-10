@@ -1,6 +1,6 @@
 using System.Threading;
 
-namespace Fortis.Analytics
+namespace Claude.Analytics
 {
     public class AnalyticsMetrics
     {

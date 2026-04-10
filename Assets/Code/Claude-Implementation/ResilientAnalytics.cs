@@ -7,7 +7,7 @@ using Interview.Mocks;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
-namespace Fortis.Analytics
+namespace Claude.Analytics
 {
     /// <summary>
     /// Worker-thread analytics service that offloads all processing to a background thread.
@@ -22,7 +22,7 @@ namespace Fortis.Analytics
     /// internally — it would use System.Random or its own RNG. This caveat is specific
     /// to the mock's simplified implementation.
     /// </summary>
-    public class ResilientAnalytics : MonoBehaviour, IAnalyticsService
+    public class ResilientAnalytics : MonoBehaviour
     {
         private static ResilientAnalytics _instance;
         public static ResilientAnalytics Instance
@@ -89,14 +89,6 @@ namespace Fortis.Analytics
             }
             _instance = this;
             DontDestroyOnLoad(gameObject);
-
-            var config = Fortis.AnalyticsConfig.Instance;
-            if (config != null)
-            {
-                _failureThreshold = config.FailureThreshold;
-                _circuitOpenDurationMs = config.CircuitOpenDurationMs;
-                _maxRetryBufferSize = config.MaxRetryBufferSize;
-            }
 
             _eventQueue = new ConcurrentQueue<AnalyticsEvent>();
             _mainThreadActions = new ConcurrentQueue<Action>();

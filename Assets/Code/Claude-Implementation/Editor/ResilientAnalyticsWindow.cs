@@ -3,7 +3,7 @@ using Fortis.Core.DependencyInjection;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fortis.Analytics.Editor
+namespace Claude.Analytics.Editor
 {
     public class ResilientAnalyticsWindow : EditorWindow
     {
@@ -25,14 +25,6 @@ namespace Fortis.Analytics.Editor
 
             var instance = DiContainer.Resolve<IAnalyticsService>();
             if (instance == null) return;
-
-            var config = AnalyticsConfig.Instance;
-            if (config != null)
-            {
-                EditorGUILayout.LabelField("Active Strategy",
-                    config.Implementation.ToString(), EditorStyles.boldLabel);
-                EditorGUILayout.Space(5);
-            }
 
             var breaker = instance.CircuitBreaker;
             var metrics = instance.Metrics;
@@ -78,17 +70,6 @@ namespace Fortis.Analytics.Editor
                 metrics.CircuitOpenCount.ToString());
             EditorGUILayout.LabelField("SDK Ready",
                 instance.IsReady ? "Yes" : "No (circuit open)");
-
-            EditorGUILayout.Space(10);
-
-            // Retry Buffer
-            EditorGUILayout.LabelField("Retry Buffer", EditorStyles.boldLabel);
-            var bufferSize = metrics.RetryBufferSize;
-            var maxBuffer = instance.MaxRetryBufferSize;
-            var barRect = EditorGUILayout.GetControlRect(false, 20);
-            EditorGUI.ProgressBar(barRect,
-                maxBuffer > 0 ? bufferSize / (float)maxBuffer : 0f,
-                $"{bufferSize} / {maxBuffer}");
 
             EditorGUILayout.Space(10);
 

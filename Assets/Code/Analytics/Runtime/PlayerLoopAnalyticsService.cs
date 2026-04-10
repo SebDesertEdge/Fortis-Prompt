@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Claude.Analytics;
 using Fortis.Core.DependencyInjection;
 using Interview.Mocks;
 using Debug = UnityEngine.Debug;
@@ -24,15 +25,13 @@ namespace Fortis.Analytics.PlayerLoop
     /// - Per-frame processing is bounded by FrameBudgetMs (default 8ms) to prevent
     ///   monopolising the frame when many events are queued.
     /// </summary>
-    public class PlayerLoopAnalyticsService : IAnalyticsService, IInitializable, ITickable,
-        Fortis.Core.DependencyInjection.IDisposable
+    public class PlayerLoopAnalyticsService : IAnalyticsService, IInitializable, ITickable, Core.DependencyInjection.IDisposable
     {
         [Inject] protected AnalyticsConfig Config;
 
         public CircuitBreaker CircuitBreaker { get; private set; }
         public AnalyticsMetrics Metrics { get; private set; }
         public bool IsReady => CircuitBreaker?.State != CircuitState.Open;
-        public int MaxRetryBufferSize => Config.MaxRetryBufferSize;
 
         private UnstableLegacyService _service;
         private ConcurrentQueue<QueuedEvent> _intakeQueue;
@@ -78,7 +77,7 @@ namespace Fortis.Analytics.PlayerLoop
 
             _retryConfig = new RetryConfig
             {
-                MaxAttempts = Config.MaxRetryAttempts,
+                MaxAttempts = RetryConfig.Default.MaxAttempts,
                 BaseDelayMs = RetryConfig.Default.BaseDelayMs,
                 MaxDelayMs = RetryConfig.Default.MaxDelayMs,
                 JitterFactor = RetryConfig.Default.JitterFactor
@@ -210,7 +209,7 @@ namespace Fortis.Analytics.PlayerLoop
         {
             evt.Callback?.Invoke(false);
 
-            if (_pendingQueue.Count >= MaxRetryBufferSize)
+            if (_pendingQueue.Count >= _retryConfig.MaxAttempts)
             {
                 _pendingQueue.Dequeue();
                 Metrics.RecordDrop();

@@ -2,12 +2,13 @@ using System;
 
 namespace Fortis.Analytics.PlayerLoop
 {
-    public struct RetryConfig
+    [Serializable]
+    public class RetryConfig
     {
-        public int MaxAttempts;
-        public double BaseDelayMs;
-        public double MaxDelayMs;
-        public double JitterFactor;
+        public int MaxAttempts = 4;
+        public double BaseDelayMs = 500;
+        public double MaxDelayMs = 8000;
+        public double JitterFactor = 0.1;
 
         public static RetryConfig Default => new RetryConfig
         {
