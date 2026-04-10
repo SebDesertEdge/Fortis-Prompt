@@ -57,11 +57,26 @@ namespace Fortis.Core.DependencyInjection
 
         private void Dispose()
         {
+            TearDown();
+            _instance = null;
+        }
+
+        public void TearDown()
+        {
             foreach (var disposable in _disposables)
             {
                 disposable.Dispose();
             }
-            
+
+            // Destroy any MonoBehaviour-based bindings that were added as components
+            foreach (var dep in _dependencies.Values)
+            {
+                if (dep is MonoBehaviour mb && mb != null && mb != this)
+                {
+                    Destroy(mb);
+                }
+            }
+
             _dependencies.Clear();
             _initializables.Clear();
             _tickables.Clear();
@@ -69,8 +84,9 @@ namespace Fortis.Core.DependencyInjection
             _lateTickables.Clear();
             _disposables.Clear();
             _pausables.Clear();
+            _focusables.Clear();
+            _cleanables.Clear();
             _initialized = false;
-            _instance = null;
         }
         
         private void Update()
