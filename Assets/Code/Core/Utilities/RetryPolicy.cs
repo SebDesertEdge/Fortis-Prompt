@@ -1,6 +1,6 @@
 using System;
 
-namespace Fortis.Analytics.PlayerLoop
+namespace Code.Core.Utilities
 {
     [Serializable]
     public class RetryConfig

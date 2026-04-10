@@ -1,4 +1,4 @@
-namespace Fortis.Core.DependencyInjection
+namespace Code.Core.DependencyInjection
 {
     public interface ITickable
     {

@@ -1,9 +1,8 @@
 using System;
 using System.Threading.Tasks;
-using Code;
-using Fortis.Core.DependencyInjection;
+using Code.Core.DependencyInjection;
 
-namespace Fortis
+namespace Code
 {
     public class MainGameInstaller : MonoInstaller
     {

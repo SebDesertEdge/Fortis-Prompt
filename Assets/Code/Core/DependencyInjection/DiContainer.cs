@@ -4,7 +4,7 @@ using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
-namespace Fortis.Core.DependencyInjection
+namespace Code.Core.DependencyInjection
 {
     public class DiContainer : MonoBehaviour
     {

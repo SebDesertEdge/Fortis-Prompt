@@ -1,10 +1,9 @@
-using Fortis.Analytics.PlayerLoop;
-using Fortis.Core.DependencyInjection;
-using Fortis.Core.Utilities;
+using Code.Core.DependencyInjection;
+using Code.Core.Utilities;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fortis
+namespace Code
 {
     public class AnalyticsConfig : ScriptableObject
     {

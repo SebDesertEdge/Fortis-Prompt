@@ -1,7 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace Fortis.Core.Utilities
+namespace Code.Core.Utilities
 {
 #if UNITY_EDITOR
     public class ScriptableObjectUtility

@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Claude.Analytics;
-using Fortis;
-using Fortis.Core.DependencyInjection;
+using Code.Core.DependencyInjection;
 using UnityEditor;
 using UnityEngine;
 

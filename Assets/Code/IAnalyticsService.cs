@@ -1,7 +1,7 @@
 using System;
 using Claude.Analytics;
 
-namespace Fortis
+namespace Code
 {
     public interface IAnalyticsService
     {
