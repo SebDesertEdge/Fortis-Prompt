@@ -11,7 +11,8 @@ namespace Fortis
         WorkerThread,
         Throttled,
         HybridDispatch,
-        Awaitable
+        Awaitable,
+        PlayerLoop
     }
 
     public class AnalyticsConfig : ScriptableObject
@@ -28,6 +29,14 @@ namespace Fortis
 
         [Header("Retry Buffer")]
         public int MaxRetryBufferSize = 100;
+
+        [Header("Frame Budget (PlayerLoop)")]
+        [Tooltip("Max milliseconds per frame to spend draining the analytics queue.")]
+        public float FrameBudgetMs = 8f;
+
+        [Header("Retry Policy (PlayerLoop)")]
+        [Tooltip("Maximum retry attempts before an event is dropped.")]
+        public int MaxRetryAttempts = 4;
         
         public static AnalyticsConfig Instance
         {
