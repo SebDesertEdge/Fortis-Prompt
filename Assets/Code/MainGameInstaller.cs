@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Fortis.Analytics;
+using Fortis.Analytics.PlayerLoop;
 using Fortis.Analytics.Strategies;
 using Fortis.Core.DependencyInjection;
 
@@ -37,6 +38,9 @@ namespace Fortis
                     break;
                 case AnalyticsImplementation.Awaitable:
                     Container.BindFromNewGameObject<AwaitableAnalyticsService>(addInterfaces: true);
+                    break;
+                case AnalyticsImplementation.PlayerLoop:
+                    Container.Bind<PlayerLoopAnalyticsService>(addInterfaces: true);
                     break;
                 default:
                     Container.Bind<AnalyticsService>(addInterfaces: true);
