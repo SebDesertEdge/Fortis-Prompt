@@ -29,10 +29,14 @@ namespace Fortis.Analytics.Editor
 
         private int _eventCount = 50;
         private bool _benchmarkRunning;
+        private bool _restarting;
         private int _completedCallbacks;
         private int _expectedCallbacks;
         private Stopwatch _stopwatch;
         private long _peakRetryBuffer;
+
+        private AnalyticsImplementation _selectedImpl;
+        private bool _implInitialized;
 
         private readonly List<BenchmarkResult> _history = new();
         private Vector2 _historyScroll;
@@ -65,7 +69,7 @@ namespace Fortis.Analytics.Editor
 
         private void OnEditorUpdate()
         {
-            if (!_benchmarkRunning) return;
+            if (!_benchmarkRunning && !_restarting) return;
 
             // Track peak retry buffer during the run
             var service = DiContainer.Resolve<IAnalyticsService>();
@@ -137,6 +141,44 @@ namespace Fortis.Analytics.Editor
                 return;
             }
 
+            var config = AnalyticsConfig.Instance;
+            if (config == null)
+            {
+                EditorGUILayout.HelpBox("AnalyticsConfig not found.", MessageType.Warning);
+                return;
+            }
+
+            // Sync dropdown to current config on first frame
+            if (!_implInitialized)
+            {
+                _selectedImpl = config.Implementation;
+                _implInitialized = true;
+            }
+
+            // Implementation selector
+            EditorGUILayout.LabelField("IMPLEMENTATION", _sectionStyle);
+            EditorGUILayout.LabelField("Active", config.Implementation.ToString(), _bodyStyle);
+
+            EditorGUILayout.BeginHorizontal();
+            _selectedImpl = (AnalyticsImplementation)EditorGUILayout.EnumPopup("Switch To", _selectedImpl);
+
+            bool needsRestart = _selectedImpl != config.Implementation;
+            EditorGUI.BeginDisabledGroup(!needsRestart || _benchmarkRunning || _restarting);
+            if (GUILayout.Button("Restart", GUILayout.Width(70)))
+            {
+                SwitchImplementation(config);
+            }
+            EditorGUI.EndDisabledGroup();
+            EditorGUILayout.EndHorizontal();
+
+            if (_restarting)
+            {
+                EditorGUILayout.HelpBox("Restarting container...", MessageType.Info);
+                return;
+            }
+
+            DrawSeparator();
+
             var service = DiContainer.Resolve<IAnalyticsService>();
             if (service == null)
             {
@@ -146,19 +188,14 @@ namespace Fortis.Analytics.Editor
                 return;
             }
 
-            var config = AnalyticsConfig.Instance;
-            string implName = config != null ? config.Implementation.ToString() : "Unknown";
-
-            EditorGUILayout.LabelField("Active Implementation", implName, _sectionStyle);
-            EditorGUILayout.Space(4);
-
-            // Controls
+            // Benchmark controls
+            EditorGUILayout.LabelField("BENCHMARK", _sectionStyle);
             EditorGUI.BeginDisabledGroup(_benchmarkRunning);
             _eventCount = EditorGUILayout.IntSlider("Event Count", _eventCount, 10, 500);
 
             if (GUILayout.Button("Run Benchmark", GUILayout.Height(30)))
             {
-                StartBenchmark(service, implName);
+                StartBenchmark(service, config.Implementation.ToString());
             }
             EditorGUI.EndDisabledGroup();
 
@@ -230,6 +267,28 @@ namespace Fortis.Analytics.Editor
                 CircuitOpenCount = metrics.CircuitOpenCount
             });
 
+            Repaint();
+        }
+
+        private async void SwitchImplementation(AnalyticsConfig config)
+        {
+            _restarting = true;
+            Repaint();
+
+            config.Implementation = _selectedImpl;
+
+            var installer = UnityEngine.Object.FindAnyObjectByType<MainGameInstaller>();
+            if (installer != null)
+            {
+                await installer.FullRestart();
+                UnityEngine.Debug.Log($"[Benchmark] Switched to {_selectedImpl}");
+            }
+            else
+            {
+                UnityEngine.Debug.LogError("[Benchmark] MainGameInstaller not found in scene.");
+            }
+
+            _restarting = false;
             Repaint();
         }
 

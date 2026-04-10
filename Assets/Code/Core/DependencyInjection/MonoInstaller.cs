@@ -62,7 +62,7 @@ namespace Fortis.Core.DependencyInjection
             OnRestartAppAsync();
             #pragma warning restore CS4014
         }
-        
+
         private async Task OnRestartAppAsync()
         {
             try
@@ -73,6 +73,24 @@ namespace Fortis.Core.DependencyInjection
             catch (OperationCanceledException e)
             {
                 Debug.LogException(e);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+        }
+
+        public async Task FullRestart()
+        {
+            try
+            {
+                Container.TearDown();
+
+                InstallBindings();
+                Container.ResolveDependencies(LogDependencyErrors);
+                Container.Initialize();
+
+                await Run();
             }
             catch (Exception e)
             {
