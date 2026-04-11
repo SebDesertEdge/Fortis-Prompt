@@ -10,8 +10,10 @@ every analytics event risks a visible hitch.
 
 I started by giving Claude Code the full problem description and the mock code. Claude
 planned and implemented a solution using a dedicated background worker thread — the
-textbook approach for offloading blocking I/O. But when I reviewed the implementation,
-I caught something Claude missed: the mock calls `UnityEngine.Random.value` internally,
+textbook approach for offloading blocking I/O. All the promps used with claude are documented in
+[ClaudeApproach README](docs/ClaudeApproach/README.md).
+
+But when I reviewed the implementation, I caught something Claude missed: the mock calls `UnityEngine.Random.value` internally,
 which is a main-thread-only API in Unity. Running the mock on a background thread throws
 in the Editor and dev builds.
 
@@ -25,7 +27,7 @@ architecture" — because a real SDK would never use `UnityEngine.Random` intern
 
 ## What's In The Repo
 
-### My Implementation (active) — `Assets/Code/ResilientAnalytics.cs`
+### [ResilientAnalytics.cs](Assets/Code/ResilientAnalytics.cs) - My Implementation (active)
 - Processes events on the main thread inside `Tick()`, bounded by a configurable
   frame budget (`FrameBudgetMs`)
 - Each frame drains the event queue until the budget is spent
@@ -36,14 +38,14 @@ architecture" — because a real SDK would never use `UnityEngine.Random` intern
   queue after the delay
 - Circuit breaker stops sending when failure threshold is hit
 
-### Claude's Implementation (reference) — `Assets/Code/Claude-Implementation/`
+### [Claude's Implementation](Assets/Code/Claude-Implementation/) (reference)
 - Dedicated worker thread with `AutoResetEvent` signaling
 - Separate retry buffer with bounded capacity (100 events)
 - Callbacks marshaled back to main thread via `ConcurrentQueue<Action>`
 - Would fully eliminate main-thread hitches if the mock didn't use `UnityEngine.Random`
 - Kept as a reference for what the production architecture should look like
 
-### Shared Components
+### Shared Components (Created by Claude but moddified to add missign ascpects)
 - **CircuitBreaker** — Thread-safe state machine (Closed/Open/HalfOpen) with
   `Interlocked` operations and injectable timestamp for deterministic testing
 - **AnalyticsMetrics** — Thread-safe counters for enqueued, succeeded, failed,
@@ -52,12 +54,20 @@ architecture" — because a real SDK would never use `UnityEngine.Random` intern
 - **AnalyticsConfig** — ScriptableObject with circuit breaker thresholds, frame
   budget, and retry configuration
 
-### Editor Tool — `Assets/Code/Editor/AnalyticsServiceWindow.cs`
+### [Editor Tool](Assets/Code/Editor/AnalyticsServiceWindow.cs)
 - Edit mode: inspect and modify config values
 - Play mode: live circuit breaker state (color-coded), real-time metrics
 - Benchmark runner: fire 10-500 events, track wall clock time, throughput,
   success rate, saved hitch time, circuit opens
 - Benchmark history across multiple runs
+
+## Implementation Steps
+
+1. The first implementation was a single `Queue` that was consuming one event per frame.
+2. I added a frame budget to limit the impact of hitching on the main thread, when error just readds the event to the 
+   queue without any retry policy.
+3. Added a retry queue to handle events that fail
+4. Replaced the `Queue` for a `ConcurrentQueue` to a thread-safe implementation
 
 ## Design Decisions
 
@@ -91,9 +101,7 @@ I used Claude Code throughout this project:
    (identified race conditions, re-entrancy issues, disposal bugs)
 4. **My implementation** — I wrote `Assets/Code/ResilientAnalytics.cs` myself after
    identifying the `UnityEngine.Random` threading constraint that Claude missed
-5. **Self-review** — Used Claude to generate comparison docs analyzing both
-   implementations (see `docs/`)
-6. **Testing** — Unit tests written with Claude assistance
+5. **Testing** — Unit tests written with Claude assistance
 
 The key insight I brought that Claude missed: `UnityEngine.Random.value` makes the mock
 fundamentally incompatible with background threading in dev builds. This drove the
@@ -110,21 +118,17 @@ architectural pivot to frame-budgeted main-thread processing.
 ## Known Issues & Future Improvements
 
 - **Individual 500ms hitches still occur** — frame budget limits frequency, not duration.
-  In production with a real SDK (no `UnityEngine.Random`), the worker-thread approach
-  eliminates this entirely.
-- **No CancellationToken on retry tasks** — `Task.Run` retries aren't cancelled on
-  shutdown. Could produce orphaned tasks on scene transitions. Fix: add
-  `CancellationTokenSource`, cancel in `Dispose()`.
-- **Busy-loop when circuit opens mid-frame** — events dequeue and re-enqueue to the
-  same queue, burning frame budget. Fix: `break` instead of `continue` when
-  `AllowRequest()` returns false inside the processing loop.
-- **Unbounded queue growth** — no cap on the main queue when circuit is open. Production
-  fix: separate bounded pending buffer with drop tracking (like Claude's implementation).
 - **No integration tests** — unit tests cover CircuitBreaker, Metrics, and RetryPolicy,
   but not the ResilientAnalytics wrapper itself. Would need an `ILegacyService` interface
   or factory to inject a deterministic fake.
 - **PlayerLoop injection** — could shift SDK processing to after `PostLateUpdate` so
   hitches occur after the frame is presented, reducing perceptual impact.
+- **Lost of events in case of crash or restart** — If the app crashes or is restarted,
+  the event queue is lost. Could save to disk or use a persistent store like SQLite to store the events that haven't 
+  been sent yet and retry the next session. 
+- **Prioritize events based on importance** — Create different retry policies for
+  different events defined by their importance. We don't want to loose some important events and other ones are ok if we loose them 
+  to keep the game running smoothly.
 
 ## Tests
 
