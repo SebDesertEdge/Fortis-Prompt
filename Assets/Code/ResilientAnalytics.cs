@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Claude.Analytics;
 using Code.Core.DependencyInjection;
@@ -22,6 +23,7 @@ namespace Code
         private UnstableLegacyService _service;
         private ConcurrentQueue<QueuedEvent> _pendingQueue;
         private Stopwatch _stopwatch;
+        private CancellationTokenSource _cts;
         
         private struct QueuedEvent
         {
@@ -38,6 +40,8 @@ namespace Code
             Metrics = new AnalyticsMetrics();
             
             _stopwatch = Stopwatch.StartNew();
+
+            _cts = new CancellationTokenSource();
             
             CircuitBreaker = new CircuitBreaker(_config.FailureThreshold, _config.CircuitOpenDurationMs);
             CircuitBreaker.OnStateChanged += OnCircuitStateChanged;
@@ -58,11 +62,6 @@ namespace Code
             var start = _stopwatch.ElapsedMilliseconds;
             var budgetMs = _config.FrameBudgetMs;
 
-            if (!CircuitBreaker.AllowRequest())
-            {
-                return;
-            }
-
             while (_stopwatch.ElapsedMilliseconds - start < budgetMs && _pendingQueue.TryDequeue(out var evt))
             {
                 if (!CircuitBreaker.AllowRequest())
@@ -73,7 +72,7 @@ namespace Code
                         Callback = evt.Callback,
                         AttemptCount = evt.AttemptCount
                     });
-                    continue;
+                    break;
                 }
 
                 TryToSendEvent(evt);
@@ -89,7 +88,10 @@ namespace Code
 
         private void CleanUp()
         {
-            _stopwatch.Stop();
+            _stopwatch?.Stop();
+            _cts?.Cancel();
+            _cts?.Dispose();
+            
             if (CircuitBreaker != null)
             {
                 CircuitBreaker.OnStateChanged -= OnCircuitStateChanged;
@@ -149,17 +151,18 @@ namespace Code
         private void ScheduleRetry(QueuedEvent evt)
         {
             var delay = RetryPolicy.GetDelay(evt.AttemptCount, _config.RetryConfig);
-
+            var token = _cts.Token;
+            
             Task.Run(async () =>
             {
                 try
                 {
-                    await Task.Delay(delay);
+                    await Task.Delay(delay, token);
                     Metrics.RecordRetry();
                     _pendingQueue.Enqueue(new QueuedEvent {EventName = evt.EventName, AttemptCount = evt.AttemptCount + 1, Callback = evt.Callback});
                 }
                 catch (TaskCanceledException) { }
-            });
+            }, token);
         }
 
         private void OnCircuitStateChanged(CircuitState newState)

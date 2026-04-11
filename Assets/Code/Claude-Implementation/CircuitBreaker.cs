@@ -18,7 +18,7 @@ namespace Claude.Analytics
         public long ClosenessToOpen => State == CircuitState.Open ? _getTimestamp() - Interlocked.Read(ref _openedAtTicks) : 0;
 
         public float PercentageOpenStateCompletion =>
-            State == CircuitState.Open ? (ClosenessToOpen / OpenDurationMs) * 100 : 100; 
+            State == CircuitState.Open ? (ClosenessToOpen / (float) OpenDurationMs) * 100 : 100; 
         
         private int _state;
         private int _consecutiveFailures;
