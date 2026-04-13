@@ -10,7 +10,7 @@ every analytics event risks a visible hitch.
 
 I started by giving Claude Code the full problem description and the mock code. Claude
 planned and implemented a solution using a dedicated background worker thread — the
-textbook approach for offloading blocking I/O. All the promps used with claude are documented in
+textbook approach for offloading blocking I/O. All the prompts used with claude are documented in
 [ClaudeApproach README](docs/ClaudeApproach/README.md).
 
 But when I reviewed the implementation, I caught something Claude missed: the mock calls `UnityEngine.Random.value` internally,
@@ -45,7 +45,7 @@ architecture" — because a real SDK would never use `UnityEngine.Random` intern
 - Would fully eliminate main-thread hitches if the mock didn't use `UnityEngine.Random`
 - Kept as a reference for what the production architecture should look like
 
-### Shared Components (Created by Claude but moddified to add missign ascpects)
+### Shared Components (Created by Claude but modified to add missing aspects)
 - **CircuitBreaker** — Thread-safe state machine (Closed/Open/HalfOpen) with
   `Interlocked` operations and injectable timestamp for deterministic testing
 - **AnalyticsMetrics** — Thread-safe counters for enqueued, succeeded, failed,
@@ -64,10 +64,10 @@ architecture" — because a real SDK would never use `UnityEngine.Random` intern
 ## Implementation Steps
 
 1. The first implementation was a single `Queue` that was consuming one event per frame.
-2. I added a frame budget to limit the impact of hitching on the main thread, when error just readds the event to the 
+2. I added a frame budget to limit the impact of hitching on the main thread, when error just re-adds the event to the 
    queue without any retry policy.
 3. Added a retry queue to handle events that fail
-4. Replaced the `Queue` for a `ConcurrentQueue` to a thread-safe implementation
+4. Replaced the `Queue` with a `ConcurrentQueue` to a thread-safe implementation
 
 ## Design Decisions
 
@@ -119,15 +119,14 @@ architectural pivot to frame-budgeted main-thread processing.
 
 - **Individual 500ms hitches still occur** — frame budget limits frequency, not duration.
 - **No integration tests** — unit tests cover CircuitBreaker, Metrics, and RetryPolicy,
-  but not the ResilientAnalytics wrapper itself. Would need an `ILegacyService` interface
-  or factory to inject a deterministic fake.
+  but not the ResilientAnalytics wrapper itself.
 - **PlayerLoop injection** — could shift SDK processing to after `PostLateUpdate` so
   hitches occur after the frame is presented, reducing perceptual impact.
-- **Lost of events in case of crash or restart** — If the app crashes or is restarted,
+- **Loss of events in case of crash or restart** — If the app crashes or is restarted,
   the event queue is lost. Could save to disk or use a persistent store like SQLite to store the events that haven't 
   been sent yet and retry the next session. 
 - **Prioritize events based on importance** — Create different retry policies for
-  different events defined by their importance. We don't want to loose some important events and other ones are ok if we loose them 
+  different events defined by their importance. We don't want to lose some important events and other ones are ok if we loose them 
   to keep the game running smoothly.
 
 ## Tests
