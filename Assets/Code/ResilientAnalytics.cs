@@ -104,7 +104,6 @@ namespace Code
         /// </summary>
         private void TryToSendEvent(QueuedEvent evt)
         {
-            var start = _stopwatch.ElapsedMilliseconds;
             bool success = false;
             
             try
@@ -114,10 +113,6 @@ namespace Code
             catch (Exception ex)
             {
                 Debug.LogWarning(ex);
-            }
-            finally
-            {
-                Metrics.AddSavedHitchTime(_stopwatch.ElapsedMilliseconds - start);
             }
             
             if (success)

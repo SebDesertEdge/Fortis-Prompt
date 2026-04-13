@@ -21,7 +21,6 @@ namespace Code.Editor
             public long Dropped;
             public long Retried;
             public float SuccessRate;
-            public long SavedHitchTimeMs;
             public long PeakRetryBuffer;
             public long CircuitOpenCount;
             public float FrameBudgetMs;
@@ -296,7 +295,6 @@ namespace Code.Editor
                 Dropped = metrics.TotalDropped,
                 Retried = metrics.TotalRetried,
                 SuccessRate = metrics.SuccessRate,
-                SavedHitchTimeMs = metrics.SavedHitchTimeMs,
                 PeakRetryBuffer = _peakRetryBuffer,
                 CircuitOpenCount = metrics.CircuitOpenCount,
                 FrameBudgetMs = config.FrameBudgetMs,
@@ -355,8 +353,7 @@ namespace Code.Editor
             EditorGUILayout.LabelField("Retried", r.Retried.ToString());
 
             EditorGUILayout.Space(2);
-
-            EditorGUILayout.LabelField("Saved Hitch Time", FormatTime(r.SavedHitchTimeMs));
+            
             EditorGUILayout.LabelField("Peak Retry Buffer", r.PeakRetryBuffer.ToString());
             EditorGUILayout.LabelField("Circuit Opens", r.CircuitOpenCount.ToString());
 

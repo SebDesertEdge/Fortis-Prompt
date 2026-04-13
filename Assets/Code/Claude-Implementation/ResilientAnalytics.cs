@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
+using Code;
 using Interview.Mocks;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
@@ -22,7 +23,7 @@ namespace Claude.Analytics
     /// internally — it would use System.Random or its own RNG. This caveat is specific
     /// to the mock's simplified implementation.
     /// </summary>
-    public class ResilientAnalytics : MonoBehaviour
+    public class ResilientAnalytics : MonoBehaviour, IAnalyticsService
     {
         private static ResilientAnalytics _instance;
         public static ResilientAnalytics Instance
