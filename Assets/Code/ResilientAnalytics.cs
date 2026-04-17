@@ -12,7 +12,7 @@ using IDisposable = System.IDisposable;
 
 namespace Code
 {
-    public class ResilientAnalytics : IAnalyticsService, IInitializable, IDisposable, ICleanable, ITickable
+    public class ResilientAnalytics : IAnalyticsService, IInitializable, IDisposable, ICleanable, ITickable, ILateTickable
     {
         public CircuitBreaker CircuitBreaker { get; private set;}
         public AnalyticsMetrics Metrics { get; private set; }
@@ -58,6 +58,11 @@ namespace Code
         }
 
         public void Tick()
+        {
+            
+        }
+        
+        public void LateTick()
         {
             var start = _stopwatch.ElapsedMilliseconds;
             var budgetMs = _config.FrameBudgetMs;

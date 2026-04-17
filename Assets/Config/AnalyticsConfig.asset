@@ -12,6 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 470b7611b8aa430cacee111a35e3f366, type: 3}
   m_Name: AnalyticsConfig
   m_EditorClassIdentifier: 
-  FailureThreshold: 8
-  CircuitOpenDurationMs: 10000
-  MaxRetryBufferSize: 100
+  FailureThreshold: 4
+  CircuitOpenDurationMs: 5000
+  FrameBudgetMs: 8
+  RetryConfig:
+    MaxAttempts: 4
+    BaseDelayMs: 500
+    MaxDelayMs: 8000
+    JitterFactor: 0.1

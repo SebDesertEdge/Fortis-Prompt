@@ -1,11 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace Code.Core.DependencyInjection
 {
+    /*
+     * Dependency Injection System
+     * Who call the binding method is responsable to tell the system to register the interfaces and subclasses, since these are expensive
+     * methods specially the subclasses one because it needs to load all the assemblies and from reflection get the classes
+     * The resolve uses a dictionary to get the dependencies for O(1) resolution 
+    */
     public class DiContainer : MonoBehaviour
     {
         private static DiContainer _instance;
@@ -24,11 +32,16 @@ namespace Code.Core.DependencyInjection
         private object _injection;
         private BindingFlags _bindingAttr = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.FlattenHierarchy;
         private bool _isPaused;
+        private Stopwatch _stopwatch;
+        private int _currentFps = 60;
 
         public bool IsPaused
         {
             set => _isPaused = value;
         }
+        
+        public static int CurrentFps => _instance._currentFps;
+        public static int RunningSeconds => _instance._runningSeconds;
         
         private void Awake()
         {
@@ -43,6 +56,7 @@ namespace Code.Core.DependencyInjection
             _focusables = new List<IFocusable>();
             _cleanables = new List<ICleanable>();
             _initialized = false;
+            _stopwatch = Stopwatch.StartNew();
         }
 
         protected void OnDestroy()
@@ -88,7 +102,9 @@ namespace Code.Core.DependencyInjection
             _cleanables.Clear();
             _initialized = false;
         }
-        
+
+        private int _frameCount;
+        private int _runningSeconds;
         private void Update()
         {
             if (!_initialized)
@@ -103,6 +119,17 @@ namespace Code.Core.DependencyInjection
             foreach (var tickable in _tickables)
             {
                 tickable.Tick();
+            }
+
+            if ((int)Math.Floor(_stopwatch.ElapsedMilliseconds / 1000f) != _runningSeconds)
+            {
+                _runningSeconds++;
+                _currentFps = _frameCount;
+                _frameCount = 0;
+            }
+            else
+            {
+                _frameCount++;
             }
         }
         

@@ -140,6 +140,8 @@ namespace Code.Editor
             var config = AnalyticsConfig.Instance;
             EditorGUILayout.Space(10);
 
+            
+            
             var service = DiContainer.Resolve<IAnalyticsService>();
             if (service == null)
             {
@@ -155,6 +157,10 @@ namespace Code.Editor
             GUILayout.FlexibleSpace();
             EditorGUILayout.LabelField("Fortis", EditorStyles.miniLabel, GUILayout.Width(40));
             EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(4);
+            
+            EditorGUILayout.LabelField($"FPS: {DiContainer.CurrentFps}", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField($"Running Seconds: {DiContainer.RunningSeconds}", EditorStyles.boldLabel);
             EditorGUILayout.Space(4);
             
             EditorGUI.BeginDisabledGroup(_benchmarkRunning);
